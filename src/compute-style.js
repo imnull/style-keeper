@@ -39,7 +39,7 @@ const calRuleWeight = (selector) => {
     if(match = selector.match(/^[a-z\-_][0-9a-z\-_]*|[^\.\#][a-z\-_][0-9a-z\-_]*/ig)){
         weight[3] += match.length;
     }
-    console.log(weight);
+    // console.log(weight);
     return weight;
 };
 
@@ -109,28 +109,57 @@ const readSelectorItem = (item) => {
 // selectors.sort((a, b) => compareRuleWeight(calRuleWeight(a), calRuleWeight(b)))
 // console.log(selectors.map(s => [s, calRuleWeight(s)]))
 
+
 /**
- * 判断className是否命中选择器
- * @param {String} selectorItem 选择器单项，类似`.aaa.bbb`
- * @param {String} className 节点className，类似`aaa bbb ccc`
+ * 判断选择器是否与节点路径匹配
+ * @param {String[]} selectorChain 解构的选择器
+ * @param {String[]} elementPath 节点树样式路径
+ * @param {Function} matcher 选择器单元与选择器比对的函数
  */
-const selectorMatch = (selectorItem, className) => {
-    const selector = readSelectorItem(selectorItem);
-    const classNm = className.replace(/^\s+|\s+$/g, '').split(/\s+/).map(s => '.' + s);
-    return selector.every(item => classNm.includes(item));
+const selectorPathMatch = (selectorChain, elementPath, matcher) => {
+    if(elementPath.length * 2 - 1 < selectorChain.length) return false;
+    const p0 = [...selectorChain], p1 = [...elementPath];
+    let r = -1;
+    while(p0.length > 0 && p1.length > 0){
+        let t0 = p0.pop(), t1 = p1.pop();
+        if(r === -1){
+            if(!matcher(t0, t1)){
+                return false;
+            }
+        } else {
+            switch(r){
+                case '>':
+                    if(!matcher(t0, t1)){
+                        return false;
+                    }
+                    break;
+                case ' ':
+                    while(!matcher(t0, t1)){
+                        if(p1.length < 1){
+                            return false;
+                        }
+                        t1 = p1.pop();
+                    }
+                    break;
+                default:
+                    return false;
+            }
+        }
+        r = p0.pop();
+    }
+    // console.log(p0, p1)
+    return p0.length < 1;
 }
 
-// console.log(selectorMatch('.aaa.bbb', 'aaa bbb ccc'))
-
-const css = require('css');
-
-const css2js = s => s.replace(/\-[a-z]/gi, (_) => _.charAt(1).toUpperCase())
-
-const getDeclarations = (rule) => {
+/**
+ * 格式化css-rule
+ * @param {Object} rule CSSRule对象
+ */
+const normalizeRule = (rule) => {
     const map = {};
     const { declarations = [], selectors = [] } = rule;
-    declarations.forEach(dec => {
-        map[css2js(dec.property)] = dec.value;
+    declarations.filter(d => d.type === 'declaration').forEach(dec => {
+        map[dec.property] = dec.value;
     });
     return {
         selectors: selectors.map(s => readSelectorPath(s)),
@@ -138,27 +167,62 @@ const getDeclarations = (rule) => {
     };
 }
 
-const { stylesheet: { rules } } = css.parse(`
-.container {
-    border: 1px solid #000;
-    margin: 1em;
-    padding: 1em;
-    font-size: 24px;
-}
-.item{
-    font-size: 16px;
-    padding: 0 1em;
-    border: 1px solid #ccc;
+
+/**
+ * Matcher: 判断className是否命中选择器
+ * @param {String} selectorItem 选择器单项，类似`.aaa.bbb`
+ * @param {String} className 节点className，类似`aaa bbb ccc`
+ */
+const matchClassName = (selectorItem, className) => {
+    const selector = readSelectorItem(selectorItem);
+    const classNm = className.replace(/^\s+|\s+$/g, '').split(/\s+/).map(s => '.' + s);
+    return selector.every(item => classNm.includes(item));
 }
 
-.container       .item, .aaa {
-    color: #f00;
-    font-size: 24px;
-}
-.container.item, .aaa> .bbbbb {
-    color: #f00;
-    font-size: 24px;
-}
-`)
+const computeStyle = ({ rules = [] }, stylePath = [], matcher) => {
+    const rs = rules
+    // 查找命中的规则。如果规则存在多个选择器，则返回权重最大的选择器。
+    .map(rule => normalizeRule(rule)).map((r, i) => {
+        const { selectors, ...other } = r;
+        const sels = selectors.filter(selector => selectorPathMatch(selector, stylePath, matcher)).map(s => s.join(''));
+        if(sels.length < 1) return false;
+        else if(sels.length > 1) {
+            sels.sort((a, b) => compareRuleWeight(calRuleWeight(b), calRuleWeight(a)))
+        }
+        return {
+            selectors: [sels[0], i],
+            ...other
+        };
+    })
+    .filter(r => !!r)
+    .sort((a, b) => {
+        const { selectors: [aa, ai] } = a;
+        const { selectors: [bb, bi] } = b;
+        let r = compareRuleWeight(calRuleWeight(aa), calRuleWeight(bb));
+        if(r === 0){
+            r = ai - bi;
+        }
+        return r;
+    })
+    .map(({ selectors, declarations }) => ({ selector: selectors[0], declarations }))
+    .reduce((r, { declarations }) => Object.assign(r, declarations), {});
 
-rules.map(rule => getDeclarations(rule)).forEach(r => console.log(r))
+    return rs;
+}
+
+const parseStyle = (styleObj, parser) => {
+    const f = (key, val) => {
+        if(typeof parser !== 'function'){
+            return { [key]: val };
+        }
+        return parser(key, val);
+    }
+    const rs = Object.keys(styleObj).map(key => f(key, styleObj[key]));
+    return Object.assign({}, ...rs);
+}
+
+module.exports = {
+    computeStyle,
+    parseStyle,
+    matchClassName
+};
