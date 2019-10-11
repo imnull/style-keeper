@@ -1,8 +1,7 @@
 const {
-    computeStyle,
-    parseStyle,
-    matchClassName
-} = require('./src/compute-style');
+    MinipStyleComputer,
+    loadCssFile,
+} = require('./src');
 
 const css2js = s => s.replace(/\-[a-z]/gi, (_) => _.charAt(1).toUpperCase());
 const rnStyleValue = (key, val) => {
@@ -21,25 +20,7 @@ const rnStyleValue = (key, val) => {
     return { [key]: val };
 }
 
-const css = require('css');
-const { stylesheet } = css.parse(`
-.a.b {/*2*/
-    color: #ff0;
-}
+const stylesheet = loadCssFile('./__css_test__.css');
 
-.b {/*4*/
-    color: #00f;
-    font-size: 16px;
-}
-.a, .c, .a .c, .c {/*3*/
-    color: #f00;
-    font-size: 14px;
-}
-.a .b {/*1*/
-    color: #fa0;
-}
-.c {
-    font-size: 24px;
-}
-`)
-console.log(parseStyle(computeStyle(stylesheet, ['a', 'c b a'], matchClassName), rnStyleValue))
+const computer = new MinipStyleComputer(stylesheet);
+console.log(computer.parse(['a', 'c b a'], rnStyleValue))

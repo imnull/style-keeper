@@ -211,14 +211,14 @@ const computeStyle = ({ rules = [] }, stylePath = [], matcher) => {
 }
 
 const parseStyle = (styleObj, parser) => {
-    const f = (key, val) => {
-        if(typeof parser !== 'function'){
-            return { [key]: val };
+    const f = typeof parser !== 'function' ? (key, val) => ({ [key]: val }) : (key, val) => {
+        let r = parser(key, val);
+        if(!r || typeof r !== 'object'){
+            r = { [key]: val };
         }
-        return parser(key, val);
+        return r;
     }
-    const rs = Object.keys(styleObj).map(key => f(key, styleObj[key]));
-    return Object.assign({}, ...rs);
+    return Object.assign({}, ...Object.keys(styleObj).map(key => f(key, styleObj[key])));
 }
 
 module.exports = {

@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node test"
+    "test": "node __test__"
   },
   "repository": {
     "type": "git",
@@ -21,7 +21,8 @@
     "url": "https://github.com/imnull/style-keeper/issues"
   },
   "homepage": "https://github.com/imnull/style-keeper#readme",
-  "dependencies": {
+  "dependencies": {},
+  "devDependencies": {
     "css": "^2.2.4"
   }
 }
